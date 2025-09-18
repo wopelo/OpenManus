@@ -33,9 +33,16 @@ class AgentState(str, Enum):
     """Agent execution states"""
 
     IDLE = "IDLE"
+    """空闲状态"""
+
     RUNNING = "RUNNING"
+    """正在执行任务"""
+
     FINISHED = "FINISHED"
+    """已完成任务"""
+
     ERROR = "ERROR"
+    """执行过程中发生错误"""
 
 
 class Function(BaseModel):

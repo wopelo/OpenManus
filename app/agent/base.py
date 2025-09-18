@@ -21,14 +21,17 @@ class BaseAgent(BaseModel, ABC):
     name: str = Field(..., description="Unique name of the agent")
     description: Optional[str] = Field(None, description="Optional agent description")
 
+    # 系统层级的提示词
     # Prompts
     system_prompt: Optional[str] = Field(
         None, description="System-level instruction prompt"
     )
+    # 确定下一步行动的提示
     next_step_prompt: Optional[str] = Field(
         None, description="Prompt for determining next action"
     )
 
+    # LLM、记忆、状态
     # Dependencies
     llm: LLM = Field(default_factory=LLM, description="Language model instance")
     memory: Memory = Field(default_factory=Memory, description="Agent's memory store")
@@ -36,6 +39,7 @@ class BaseAgent(BaseModel, ABC):
         default=AgentState.IDLE, description="Current agent state"
     )
 
+    # 最大步骤、当前步骤
     # Execution control
     max_steps: int = Field(default=10, description="Maximum steps before termination")
     current_step: int = Field(default=0, description="Current step in execution")
@@ -46,6 +50,7 @@ class BaseAgent(BaseModel, ABC):
         arbitrary_types_allowed = True
         extra = "allow"  # Allow extra fields for flexibility in subclasses
 
+    # model_validator 对模型进行验证，after 表示在字段验证之后执行
     @model_validator(mode="after")
     def initialize_agent(self) -> "BaseAgent":
         """Initialize agent with default settings if not provided."""
@@ -125,10 +130,12 @@ class BaseAgent(BaseModel, ABC):
         Raises:
             RuntimeError: If the agent is not in IDLE state at start.
         """
+        # 如果当前 Agent 不空闲，抛出异常
         if self.state != AgentState.IDLE:
             raise RuntimeError(f"Cannot run agent from state: {self.state}")
 
         if request:
+            # 将用用户
             self.update_memory("user", request)
 
         results: List[str] = []
