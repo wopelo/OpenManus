@@ -14,6 +14,7 @@ class Role(str, Enum):
 
 
 ROLE_VALUES = tuple(role.value for role in Role)
+# Literal 用于指定变量必须是特定的字面量值
 ROLE_TYPE = Literal[ROLE_VALUES]  # type: ignore
 
 

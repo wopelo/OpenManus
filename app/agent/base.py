@@ -19,6 +19,7 @@ class BaseAgent(BaseModel, ABC):
 
     # Core attributes
     name: str = Field(..., description="Unique name of the agent")
+    # Optional 表示可选
     description: Optional[str] = Field(None, description="Optional agent description")
 
     # 系统层级的提示词
@@ -44,6 +45,7 @@ class BaseAgent(BaseModel, ABC):
     max_steps: int = Field(default=10, description="Maximum steps before termination")
     current_step: int = Field(default=0, description="Current step in execution")
 
+    # 重复阈值，当 Agent 产出的消息重复数量超过该值，则认为 Agent 陷入循环对话
     duplicate_threshold: int = 2
 
     class Config:
@@ -60,6 +62,11 @@ class BaseAgent(BaseModel, ABC):
             self.memory = Memory()
         return self
 
+    # 似乎是为了实现临时状态变更？
+    # 代码的执行顺序是：
+    # 1.with语句首先执行yield之前的语句；
+    # 2.然后，由yield把变量输出出去，执行with语句内部的所有语句；
+    # 3.最后执行yield之后的语句。
     @asynccontextmanager
     async def state_context(self, new_state: AgentState):
         """Context manager for safe agent state transitions.
@@ -84,11 +91,12 @@ class BaseAgent(BaseModel, ABC):
             self.state = AgentState.ERROR  # Transition to ERROR on failure
             raise e
         finally:
+            # 无论执行成功与否，都自动恢复到原始状态
             self.state = previous_state  # Revert to previous state
 
     def update_memory(
         self,
-        role: ROLE_TYPE,  # type: ignore
+        role: ROLE_TYPE,  # type: ignore 是 user、system、assistant、tool 中的一个
         content: str,
         base64_image: Optional[str] = None,
         **kwargs,
@@ -135,11 +143,12 @@ class BaseAgent(BaseModel, ABC):
             raise RuntimeError(f"Cannot run agent from state: {self.state}")
 
         if request:
-            # 将用用户
+            # 将用户输入添加到记忆中
             self.update_memory("user", request)
 
         results: List[str] = []
         async with self.state_context(AgentState.RUNNING):
+            # 开启循环，结束条件是 达到最大步骤 或 状态达到FINISHED
             while (
                 self.current_step < self.max_steps and self.state != AgentState.FINISHED
             ):
@@ -148,6 +157,7 @@ class BaseAgent(BaseModel, ABC):
                 step_result = await self.step()
 
                 # Check for stuck state
+                # 判断 agent 是否陷入循环对话
                 if self.is_stuck():
                     self.handle_stuck_state()
 
@@ -160,6 +170,7 @@ class BaseAgent(BaseModel, ABC):
         await SANDBOX_CLIENT.cleanup()
         return "\n".join(results) if results else "No steps executed"
 
+    # abstractmethod 用于装饰抽象方法，step 由子类实现
     @abstractmethod
     async def step(self) -> str:
         """Execute a single step in the agent's workflow.
@@ -167,31 +178,40 @@ class BaseAgent(BaseModel, ABC):
         Must be implemented by subclasses to define specific behavior.
         """
 
+    # 处理智能体的卡顿状态
     def handle_stuck_state(self):
         """Handle stuck state by adding a prompt to change strategy"""
+        # 当检测到重复响应时，会添加一个提示信息到下一步的提示中，提醒 Agent 考虑新策略并避免重复无效路径
         stuck_prompt = "\
         Observed duplicate responses. Consider new strategies and avoid repeating ineffective paths already attempted."
         self.next_step_prompt = f"{stuck_prompt}\n{self.next_step_prompt}"
         logger.warning(f"Agent detected stuck state. Added prompt: {stuck_prompt}")
 
+    # 检测 Agent 是否陷入循环对话
     def is_stuck(self) -> bool:
         """Check if the agent is stuck in a loop by detecting duplicate content"""
+        # 消息数量少于2条，不认为陷入循环
         if len(self.memory.messages) < 2:
             return False
 
+        # 获取最后一条消息，如果内容为空则返回False
         last_message = self.memory.messages[-1]
         if not last_message.content:
             return False
 
         # Count identical content occurrences
+        # 统计相同内容的出现次数，具体做法：
+        # 从后往前遍历历史消息，统计与最后一条消息内容相同且角色为"assistant"的消息数量
+        # 如果相同内容出现次数超过预设阈值，则判定为陷入循环
         duplicate_count = sum(
             1
-            for msg in reversed(self.memory.messages[:-1])
+            for msg in reversed(self.memory.messages[:-1]) # reversed用于创建反向迭代器，即从最后一个元素开始遍历
             if msg.role == "assistant" and msg.content == last_message.content
         )
 
         return duplicate_count >= self.duplicate_threshold
 
+    # property装饰器用于将类的方法转换为只读属性
     @property
     def messages(self) -> List[Message]:
         """Retrieve a list of messages from the agent's memory."""
