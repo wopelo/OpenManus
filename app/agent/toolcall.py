@@ -8,9 +8,9 @@ from app.agent.react import ReActAgent
 from app.exceptions import TokenLimitExceeded
 from app.logger import logger
 from app.prompt.toolcall import NEXT_STEP_PROMPT, SYSTEM_PROMPT
-from app.schema import TOOL_CHOICE_TYPE, AgentState, Message, ToolCall, ToolChoice
+from app.schema import (TOOL_CHOICE_TYPE, AgentState, Message, ToolCall,
+                        ToolChoice)
 from app.tool import CreateChatCompletion, Terminate, ToolCollection
-
 
 TOOL_CALL_REQUIRED = "Tool calls required but none provided"
 
@@ -28,6 +28,7 @@ class ToolCallAgent(ReActAgent):
         CreateChatCompletion(), Terminate()
     )
     tool_choices: TOOL_CHOICE_TYPE = ToolChoice.AUTO  # type: ignore
+    # default_factory 用于指定一个可调用对象来生成字段的默认值
     special_tool_names: List[str] = Field(default_factory=lambda: [Terminate().name])
 
     tool_calls: List[ToolCall] = Field(default_factory=list)
@@ -36,14 +37,18 @@ class ToolCallAgent(ReActAgent):
     max_steps: int = 30
     max_observe: Optional[Union[int, bool]] = None
 
+    # 使用 LLM 分析当前状态，由 LLM 选择合适的工具，返回是否需要调用工具
     async def think(self) -> bool:
         """Process current state and decide next actions using tools"""
         if self.next_step_prompt:
+            # 将 next_step_prompt 转换成 Message 对象，并添加到 messages 中
             user_msg = Message.user_message(self.next_step_prompt)
             self.messages += [user_msg]
 
         try:
             # Get response with tool options
+            # 向 LLM 询问是否调用工具
+            # ask_tool 返回 result.choices[0].message，所以 response 是 ChatCompletionMessage 类型
             response = await self.llm.ask_tool(
                 messages=self.messages,
                 system_msgs=(
@@ -58,6 +63,7 @@ class ToolCallAgent(ReActAgent):
             raise
         except Exception as e:
             # Check if this is a RetryError containing TokenLimitExceeded
+            # 如果是因为超出了 token 限制，返回 False
             if hasattr(e, "__cause__") and isinstance(e.__cause__, TokenLimitExceeded):
                 token_limit_error = e.__cause__
                 logger.error(
@@ -72,6 +78,8 @@ class ToolCallAgent(ReActAgent):
                 return False
             raise
 
+        # 正常情况下，tool_calls 形如：
+        # [ChatCompletionMessageToolCall(id='call_5UWZsEERn1Iew2QI3OjRPYnG', function=Function(arguments='{"x":1024,"y":10086}', name='add'), type='function')]
         self.tool_calls = tool_calls = (
             response.tool_calls if response and response.tool_calls else []
         )
@@ -93,6 +101,7 @@ class ToolCallAgent(ReActAgent):
                 raise RuntimeError("No response received from the LLM")
 
             # Handle different tool_choices modes
+            # 如果是不进行工具选择，但 LLM 又选择了工具，返回 False
             if self.tool_choices == ToolChoice.NONE:
                 if tool_calls:
                     logger.warning(
@@ -104,6 +113,7 @@ class ToolCallAgent(ReActAgent):
                 return False
 
             # Create and add assistant message
+            # 将 LLM 的返回添加到 memory 中
             assistant_msg = (
                 Message.from_tool_calls(content=content, tool_calls=self.tool_calls)
                 if self.tool_calls
@@ -128,6 +138,7 @@ class ToolCallAgent(ReActAgent):
             )
             return False
 
+    # 执行工具调用并处理其结果
     async def act(self) -> str:
         """Execute tool calls and handle their results"""
         if not self.tool_calls:
@@ -142,6 +153,7 @@ class ToolCallAgent(ReActAgent):
             # Reset base64_image for each tool call
             self._current_base64_image = None
 
+            # command 其实是 ChatCompletionMessageToolCall 类型
             result = await self.execute_tool(command)
 
             if self.max_observe:
@@ -169,11 +181,13 @@ class ToolCallAgent(ReActAgent):
             return "Error: Invalid command format"
 
         name = command.function.name
+        # 如果工具不存在，返回错误
         if name not in self.available_tools.tool_map:
             return f"Error: Unknown tool '{name}'"
 
         try:
             # Parse arguments
+            # 解析参数
             args = json.loads(command.function.arguments or "{}")
 
             # Execute the tool
@@ -189,6 +203,7 @@ class ToolCallAgent(ReActAgent):
                 self._current_base64_image = result.base64_image
 
             # Format result for display (standard case)
+            # 格式化显示结果
             observation = (
                 f"Observed output of cmd `{name}` executed:\n{str(result)}"
                 if result

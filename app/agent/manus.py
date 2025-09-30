@@ -96,6 +96,7 @@ class Manus(ToolCallAgent):
         stdio_args: List[str] = None,
     ) -> None:
         """Connect to an MCP server and add its tools."""
+        # 不同的链接方式
         if use_stdio:
             await self.mcp_clients.connect_stdio(
                 server_url, stdio_args or [], server_id
@@ -106,13 +107,16 @@ class Manus(ToolCallAgent):
             self.connected_servers[server_id or server_url] = server_url
 
         # Update available tools with only the new tools from this server
+        # 当成功连接到一个新的MCP服务器后，从所有 MCP 工具中找出等于 server_id 的
         new_tools = [
             tool for tool in self.mcp_clients.tools if tool.server_id == server_id
         ]
+        # 将这些新工具添加到可用工具集合中
         self.available_tools.add_tools(*new_tools)
 
     async def disconnect_mcp_server(self, server_id: str = "") -> None:
         """Disconnect from an MCP server and remove its tools."""
+        # mcp_clients.disconnect 方法如果没有传递 server_id，则会断开与所有 MCP 服务器的链接
         await self.mcp_clients.disconnect(server_id)
         if server_id:
             self.connected_servers.pop(server_id, None)
@@ -120,12 +124,15 @@ class Manus(ToolCallAgent):
             self.connected_servers.clear()
 
         # Rebuild available tools without the disconnected server's tools
+        # 重新构建可用工具
+        # 先筛选出所有非 MCP 工具
         base_tools = [
             tool
             for tool in self.available_tools.tools
             if not isinstance(tool, MCPClientTool)
         ]
         self.available_tools = ToolCollection(*base_tools)
+        # 添加所有没有断开链接的 MCP 服务的工具
         self.available_tools.add_tools(*self.mcp_clients.tools)
 
     async def cleanup(self):
@@ -144,14 +151,18 @@ class Manus(ToolCallAgent):
             self._initialized = True
 
         original_prompt = self.next_step_prompt
+        # 检查最近3条消息中是否使用了浏览器工具
         recent_messages = self.memory.messages[-3:] if self.memory.messages else []
+        # any 函数检查是否至少有一条消息满足条件
         browser_in_use = any(
+            # 这段代码由于被()包裹，是生成器表达式
             tc.function.name == BrowserUseTool().name
-            for msg in recent_messages
-            if msg.tool_calls
-            for tc in msg.tool_calls
+                for msg in recent_messages
+                    if msg.tool_calls
+                        for tc in msg.tool_calls
         )
 
+        # 如果正在使用浏览器，则更新下一步提示词为浏览器上下文相关的提示
         if browser_in_use:
             self.next_step_prompt = (
                 await self.browser_context_helper.format_next_step_prompt()
@@ -160,6 +171,7 @@ class Manus(ToolCallAgent):
         result = await super().think()
 
         # Restore original prompt
+        # 恢复原始的下一步提示词
         self.next_step_prompt = original_prompt
 
         return result
