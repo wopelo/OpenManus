@@ -165,13 +165,14 @@ class Message(BaseModel):
 
 
 class Memory(BaseModel):
-    messages: List[Message] = Field(default_factory=list)
-    max_messages: int = Field(default=100)
+    messages: List[Message] = Field(default_factory=list) # 保存对话信息
+    max_messages: int = Field(default=100) # 最大保存消息数
 
     def add_message(self, message: Message) -> None:
         """Add a message to memory"""
         self.messages.append(message)
         # Optional: Implement message limit
+        # 如果存储的消息数量超过限制，则保留最近的消息
         if len(self.messages) > self.max_messages:
             self.messages = self.messages[-self.max_messages :]
 

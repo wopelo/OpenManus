@@ -2,36 +2,21 @@ import math
 from typing import Dict, List, Optional, Union
 
 import tiktoken
-from openai import (
-    APIError,
-    AsyncAzureOpenAI,
-    AsyncOpenAI,
-    AuthenticationError,
-    OpenAIError,
-    RateLimitError,
-)
+from openai import (APIError, AsyncAzureOpenAI, AsyncOpenAI,
+                    AuthenticationError, OpenAIError, RateLimitError)
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_random_exponential,
-)
+from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
+                      wait_random_exponential)
 
 from app.bedrock import BedrockClient
 from app.config import LLMSettings, config
 from app.exceptions import TokenLimitExceeded
 from app.logger import logger  # Assuming a logger is set up in your app
-from app.schema import (
-    ROLE_VALUES,
-    TOOL_CHOICE_TYPE,
-    TOOL_CHOICE_VALUES,
-    Message,
-    ToolChoice,
-)
-
+from app.schema import (ROLE_VALUES, TOOL_CHOICE_TYPE, TOOL_CHOICE_VALUES,
+                        Message, ToolChoice)
 
 REASONING_MODELS = ["o1", "o3-mini"]
+"""推理模型"""
 MULTIMODAL_MODELS = [
     "gpt-4-vision-preview",
     "gpt-4o",
@@ -40,9 +25,11 @@ MULTIMODAL_MODELS = [
     "claude-3-sonnet-20240229",
     "claude-3-haiku-20240307",
 ]
+"""多模态模型，支持多种类型的输入"""
 
 
 class TokenCounter:
+    """核心是tokenizer，封装方法用于计算文本、图片和工具调用的token数"""
     # Token constants
     BASE_MESSAGE_TOKENS = 4
     FORMAT_TOKENS = 2
@@ -174,13 +161,19 @@ class TokenCounter:
 class LLM:
     _instances: Dict[str, "LLM"] = {}
 
+    # new 是真正创建类实例的方法，在 init 方法之前被调用
+    # 返回新创建的实例对象
     def __new__(
         cls, config_name: str = "default", llm_config: Optional[LLMSettings] = None
     ):
+        # 整体看就是实现单例
+        # 检查是否已经存在对应 config_name 的实例
         if config_name not in cls._instances:
+            # 如果不存在，则创建新实例并存储
             instance = super().__new__(cls)
             instance.__init__(config_name, llm_config)
             cls._instances[config_name] = instance
+
         return cls._instances[config_name]
 
     def __init__(
@@ -198,8 +191,8 @@ class LLM:
             self.base_url = llm_config.base_url
 
             # Add token counting related attributes
-            self.total_input_tokens = 0
-            self.total_completion_tokens = 0
+            self.total_input_tokens = 0 # 总输入token数
+            self.total_completion_tokens = 0 # 总生成token数
             self.max_input_tokens = (
                 llm_config.max_input_tokens
                 if hasattr(llm_config, "max_input_tokens")
@@ -233,10 +226,11 @@ class LLM:
         return len(self.tokenizer.encode(text))
 
     def count_message_tokens(self, messages: List[dict]) -> int:
+        """Calculate the number of tokens in a message list"""
         return self.token_counter.count_message_tokens(messages)
 
     def update_token_count(self, input_tokens: int, completion_tokens: int = 0) -> None:
-        """Update token counts"""
+        """Update token counts，分别更新total_input_tokens、total_completion_tokens"""
         # Only track tokens if max_input_tokens is set
         self.total_input_tokens += input_tokens
         self.total_completion_tokens += completion_tokens
@@ -247,7 +241,7 @@ class LLM:
         )
 
     def check_token_limit(self, input_tokens: int) -> bool:
-        """Check if token limits are exceeded"""
+        """Check if token limits are exceeded，检查输入内容是否超过 max_input_tokens"""
         if self.max_input_tokens is not None:
             return (self.total_input_tokens + input_tokens) <= self.max_input_tokens
         # If max_input_tokens is not set, always return True
@@ -269,6 +263,7 @@ class LLM:
     ) -> List[dict]:
         """
         Format messages for LLM by converting them to OpenAI message format.
+        主要处理成支持多模态模型的格式
 
         Args:
             messages: List of messages that can be either dict or Message objects
@@ -351,6 +346,7 @@ class LLM:
 
         return formatted_messages
 
+    # retry 装饰器用于实现自动重试机制
     @retry(
         wait=wait_random_exponential(min=1, max=60),
         stop=stop_after_attempt(6),
@@ -446,6 +442,7 @@ class LLM:
                 print(chunk_message, end="", flush=True)
 
             print()  # Newline after streaming
+            # 将收集的分片消息拼接成完整的响应
             full_response = "".join(collected_messages).strip()
             if not full_response:
                 raise ValueError("Empty response from streaming LLM")

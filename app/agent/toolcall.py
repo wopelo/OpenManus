@@ -56,6 +56,17 @@ class ToolCallAgent(ReActAgent):
                     if self.system_prompt
                     else None
                 ),
+                # to_params 函数将 available_tools 转换成 openAI Function call 要求的格式，形如：
+                # [
+                #   {
+                #     "type": "function",
+                #     "function": {
+                #         "name": self.name,
+                #         "description": self.description,
+                #         "parameters": self.parameters,
+                #     },
+                #   },
+                # ]
                 tools=self.available_tools.to_params(),
                 tool_choice=self.tool_choices,
             )
