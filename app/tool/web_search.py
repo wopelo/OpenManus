@@ -9,13 +9,9 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from app.config import config
 from app.logger import logger
 from app.tool.base import BaseTool, ToolResult
-from app.tool.search import (
-    BaiduSearchEngine,
-    BingSearchEngine,
-    DuckDuckGoSearchEngine,
-    GoogleSearchEngine,
-    WebSearchEngine,
-)
+from app.tool.search import (BaiduSearchEngine, BingSearchEngine,
+                             DuckDuckGoSearchEngine, GoogleSearchEngine,
+                             WebSearchEngine)
 from app.tool.search.base import SearchItem
 
 
@@ -160,6 +156,7 @@ class WebSearch(BaseTool):
     description: str = """Search the web for real-time information about any topic.
     This tool returns comprehensive search results with relevant information, URLs, titles, and descriptions.
     If the primary search engine fails, it automatically falls back to alternative engines."""
+    # 在网上搜索任何主题的实时信息。此工具返回包含相关信息、URL、标题和描述的全面搜索结果。如果主搜索引擎失败，它会自动回退到其他引擎。
     parameters: dict = {
         "type": "object",
         "properties": {

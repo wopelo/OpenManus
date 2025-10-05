@@ -3,9 +3,14 @@ import base64
 import json
 from typing import Generic, Optional, TypeVar
 
+# browser_use 是一个浏览器自动化工具，封装了底层浏览器操
+# Browser 是核心类，用于创建和管理浏览器实例
+# BrowserConfig 用于配置浏览器参数，如是否无头模式、安全设置等
 from browser_use import Browser as BrowserUseBrowser
 from browser_use import BrowserConfig
+# BrowserContext 管理浏览器会话上下文
 from browser_use.browser.context import BrowserContext, BrowserContextConfig
+# DomService 提供 DOM 元素操作和查询功能
 from browser_use.dom.service import DomService
 from pydantic import Field, field_validator
 from pydantic_core.core_schema import ValidationInfo
@@ -14,7 +19,6 @@ from app.config import config
 from app.llm import LLM
 from app.tool.base import BaseTool, ToolResult
 from app.tool.web_search import WebSearch
-
 
 _BROWSER_DESCRIPTION = """\
 A powerful browser automation tool that allows interaction with web pages through various actions.
@@ -32,10 +36,25 @@ Key capabilities include:
 
 Note: When using element indices, refer to the numbered elements shown in the current browser state.
 """
+# 大意：
+# 一个强大的浏览器自动化工具，允许通过各种操作与网页进行交互。
+# *此工具提供用于控制浏览器会话、导航网页和提取信息的命令
+# *它在调用之间保持状态，使浏览器会话保持活动状态，直到显式关闭
+# *当您需要浏览网站、填写表单、单击按钮、提取内容或执行网络搜索时，请使用此功能
+# *每个操作都需要工具依赖关系中定义的特定参数
+# 关键能力包括：
+# *导航：转到特定网址、返回、搜索网络或刷新页面
+# *交互：点击元素，输入文本，从下拉菜单中选择，发送键盘命令
+# *滚动：按像素量向上/向下滚动或滚动到特定文本
+# *内容提取：根据特定目标从网页中提取和分析内容
+# *选项卡管理：在选项卡之间切换、打开新选项卡或关闭选项卡
+# 注意：使用元素索引时，请参考当前浏览器状态中显示的编号元素。
 
+# TypeVar 用于创建类型变量
 Context = TypeVar("Context")
 
 
+# Generic 用于创建泛型类或泛型函数。它允许我们在定义类或函数时使用类型变量
 class BrowserUseTool(BaseTool, Generic[Context]):
     name: str = "browser_use"
     description: str = _BROWSER_DESCRIPTION
@@ -52,8 +71,8 @@ class BrowserUseTool(BaseTool, Generic[Context]):
                     "scroll_up",
                     "scroll_to_text",
                     "send_keys",
-                    "get_dropdown_options",
-                    "select_dropdown_option",
+                    "get_dropdown_options", # 获取下拉选项
+                    "select_dropdown_option", # 选择下拉选项
                     "go_back",
                     "web_search",
                     "wait",

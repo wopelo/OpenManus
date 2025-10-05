@@ -64,11 +64,11 @@ class BaseSandboxClient(ABC):
 
     @abstractmethod
     async def copy_from(self, container_path: str, local_path: str) -> None:
-        """Copies file from container."""
+        """Copies file from container.从容器复制文件"""
 
     @abstractmethod
     async def copy_to(self, local_path: str, container_path: str) -> None:
-        """Copies file to container."""
+        """Copies file to container.将文件复制到容器"""
 
     @abstractmethod
     async def read_file(self, path: str) -> str:
@@ -84,7 +84,7 @@ class BaseSandboxClient(ABC):
 
 
 class LocalSandboxClient(BaseSandboxClient):
-    """Local sandbox client implementation."""
+    """Local sandbox client implementation.本地沙盒客户端实现"""
 
     def __init__(self):
         """Initializes local sandbox client."""

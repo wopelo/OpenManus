@@ -8,7 +8,6 @@ from app.config import SandboxSettings
 from app.exceptions import ToolError
 from app.sandbox.client import SANDBOX_CLIENT
 
-
 PathLike = Union[str, Path]
 
 
@@ -40,7 +39,7 @@ class FileOperator(Protocol):
 
 
 class LocalFileOperator(FileOperator):
-    """File operations implementation for local filesystem."""
+    """File operations implementation for local filesystem.本地文件系统的文件操作实现"""
 
     encoding: str = "utf-8"
 
@@ -70,6 +69,7 @@ class LocalFileOperator(FileOperator):
         self, cmd: str, timeout: Optional[float] = 120.0
     ) -> Tuple[int, str, str]:
         """Run a shell command locally."""
+        # 创建子进程执行命令
         process = await asyncio.create_subprocess_shell(
             cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
@@ -79,11 +79,12 @@ class LocalFileOperator(FileOperator):
                 process.communicate(), timeout=timeout
             )
             return (
-                process.returncode or 0,
-                stdout.decode(),
-                stderr.decode(),
+                process.returncode or 0, # 退出码
+                stdout.decode(), # 标准输出
+                stderr.decode(), # 错误输出
             )
         except asyncio.TimeoutError as exc:
+            # 如果超时则杀死进程并抛出 TimeoutError 异常
             try:
                 process.kill()
             except ProcessLookupError:
@@ -94,7 +95,7 @@ class LocalFileOperator(FileOperator):
 
 
 class SandboxFileOperator(FileOperator):
-    """File operations implementation for sandbox environment."""
+    """File operations implementation for sandbox environment.沙盒环境的文件操作实现"""
 
     def __init__(self):
         self.sandbox_client = SANDBOX_CLIENT

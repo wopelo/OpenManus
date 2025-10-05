@@ -1,4 +1,4 @@
-"""File and directory manipulation tool with sandbox support."""
+"""File and directory manipulation tool with sandbox support.支持沙盒的文件和目录操作工具。"""
 
 from collections import defaultdict
 from pathlib import Path
@@ -8,14 +8,10 @@ from app.config import config
 from app.exceptions import ToolError
 from app.tool import BaseTool
 from app.tool.base import CLIResult, ToolResult
-from app.tool.file_operators import (
-    FileOperator,
-    LocalFileOperator,
-    PathLike,
-    SandboxFileOperator,
-)
+from app.tool.file_operators import (FileOperator, LocalFileOperator, PathLike,
+                                     SandboxFileOperator)
 
-
+# Literal 用于指定变量或参数只能是特定的字面值
 Command = Literal[
     "view",
     "create",
@@ -29,6 +25,7 @@ SNIPPET_LINES: int = 4
 MAX_RESPONSE_LEN: int = 16000
 TRUNCATED_MESSAGE: str = (
     "<response clipped><NOTE>To save on context only part of this file has been shown to you. "
+    # grep 用于在文件中搜索指定的文本
     "You should retry this tool after you have searched inside the file with `grep -n` "
     "in order to find the line numbers of what you are looking for.</NOTE>"
 )
@@ -46,19 +43,31 @@ Notes for using the `str_replace` command:
 * If the `old_str` parameter is not unique in the file, the replacement will not be performed. Make sure to include enough context in `old_str` to make it unique
 * The `new_str` parameter should contain the edited lines that should replace the `old_str`
 """
+# cat 命令用于连接和显示文件内容，-n 选项会在输出的每一行前面加上行号
+# 上述文字的大意是：
+# 用于查看、创建和编辑文件的自定义编辑工具
+# *如果“path”是一个文件，则“view”显示应用“cat-n”的结果。如果`path`是一个目录，`view`将列出非隐藏文件和目录，深度可达2级
+# *如果指定的“path”已作为文件存在，则无法使用“create”命令
+# *如果一个“命令”生成一个长输出，它将被截断并标记为“<response clipped>”
+# *“undo_edit”命令将恢复对“path”处的文件进行的最后一次编辑`
 
+# 使用`str_replace`命令的注意事项：
+# *`old_str`参数应与原始文件中的一行或多行连续行完全匹配。注意留白！
+# *如果`old_str`参数在文件中不是唯一的，则不会执行替换。确保在`old_str`中包含足够的上下文，使其唯一
+# *“new_str”参数应包含应替换“old_str”的已编辑行`
 
 def maybe_truncate(
     content: str, truncate_after: Optional[int] = MAX_RESPONSE_LEN
 ) -> str:
     """Truncate content and append a notice if content exceeds the specified length."""
+    # 如果内容超过指定长度，则截断内容并附加通知。
     if not truncate_after or len(content) <= truncate_after:
         return content
     return content[:truncate_after] + TRUNCATED_MESSAGE
 
 
 class StrReplaceEditor(BaseTool):
-    """A tool for viewing, creating, and editing files with sandbox support."""
+    """A tool for viewing, creating, and editing files with sandbox support.支持沙盒的文件和目录操作工具"""
 
     name: str = "str_replace_editor"
     description: str = _STR_REPLACE_EDITOR_DESCRIPTION
@@ -86,10 +95,12 @@ class StrReplaceEditor(BaseTool):
                 "description": "Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.",
                 "type": "string",
             },
+            # 插入行，`new_str`将插入到 insert_line 之后。
             "insert_line": {
                 "description": "Required parameter of `insert` command. The `new_str` will be inserted AFTER the line `insert_line` of `path`.",
                 "type": "integer",
             },
+            # 查看范围，例如[11,12]将显示第11行和第12行
             "view_range": {
                 "description": "Optional parameter of `view` command when `path` points to a file. If none is given, the full file is shown. If provided, the file will be shown in the indicated line number range, e.g. [11, 12] will show lines 11 and 12. Indexing at 1 to start. Setting `[start_line, -1]` shows all lines from `start_line` to the end of the file.",
                 "items": {"type": "integer"},
@@ -99,12 +110,14 @@ class StrReplaceEditor(BaseTool):
         "required": ["command", "path"],
     }
     _file_history: DefaultDict[PathLike, List[str]] = defaultdict(list)
+    # 本地文件操作对象，提供 读、写、判断路径是否是文件夹、判断路径是否存在、运行命令 等基础方法
     _local_operator: LocalFileOperator = LocalFileOperator()
+    # 沙盒文件操作对象，提供 读、写、判断路径是否是文件夹、判断路径是否存在、运行命令 等基础方法
     _sandbox_operator: SandboxFileOperator = SandboxFileOperator()
 
     # def _get_operator(self, use_sandbox: bool) -> FileOperator:
     def _get_operator(self) -> FileOperator:
-        """Get the appropriate file operator based on execution mode."""
+        """Get the appropriate file operator based on execution mode.根据配置获取文件操作对象"""
         return (
             self._sandbox_operator
             if config.sandbox.use_sandbox
@@ -124,10 +137,10 @@ class StrReplaceEditor(BaseTool):
         **kwargs: Any,
     ) -> str:
         """Execute a file operation command."""
-        # Get the appropriate file operator
+        # 获取文件操作对象
         operator = self._get_operator()
 
-        # Validate path and command combination
+        # 根据执行环境验证路径和命令组合是否合法
         await self.validate_path(command, Path(path), operator)
 
         # Execute the appropriate command
@@ -166,7 +179,7 @@ class StrReplaceEditor(BaseTool):
     async def validate_path(
         self, command: str, path: Path, operator: FileOperator
     ) -> None:
-        """Validate path and command combination based on execution environment."""
+        """Validate path and command combination based on execution environment.根据执行环境验证路径和命令组合"""
         # Check if path is absolute
         if not path.is_absolute():
             raise ToolError(f"The path {path} is not an absolute path")
@@ -218,6 +231,7 @@ class StrReplaceEditor(BaseTool):
     @staticmethod
     async def _view_directory(path: PathLike, operator: FileOperator) -> CLIResult:
         """Display directory contents."""
+        # 构造find命令，查找目录下最多2层深度的文件和文件夹，排除隐藏项目
         find_cmd = f"find {path} -maxdepth 2 -not -path '*/\\.*'"
 
         # Execute command using the operator
@@ -238,7 +252,7 @@ class StrReplaceEditor(BaseTool):
         view_range: Optional[List[int]] = None,
     ) -> CLIResult:
         """Display file content, optionally within a specified line range."""
-        # Read file content
+        # 先读取全部内容
         file_content = await operator.read_file(path)
         init_line = 1
 
@@ -253,7 +267,7 @@ class StrReplaceEditor(BaseTool):
             n_lines_file = len(file_lines)
             init_line, final_line = view_range
 
-            # Validate view range
+            # 判断行范围是否合法
             if init_line < 1 or init_line > n_lines_file:
                 raise ToolError(
                     f"Invalid `view_range`: {view_range}. Its first element `{init_line}` should be "
@@ -270,7 +284,7 @@ class StrReplaceEditor(BaseTool):
                     f"larger or equal than its first `{init_line}`"
                 )
 
-            # Apply range
+            # 根据行范围裁剪内容
             if final_line == -1:
                 file_content = "\n".join(file_lines[init_line - 1 :])
             else:
@@ -290,11 +304,12 @@ class StrReplaceEditor(BaseTool):
     ) -> CLIResult:
         """Replace a unique string in a file with a new string."""
         # Read file content and expand tabs
+        # expandtabs 用于将字符串中的制表符（tab）替换为空格
         file_content = (await operator.read_file(path)).expandtabs()
         old_str = old_str.expandtabs()
         new_str = new_str.expandtabs() if new_str is not None else ""
 
-        # Check if old_str is unique in the file
+        # 检查旧字符串是否唯一出现
         occurrences = file_content.count(old_str)
         if occurrences == 0:
             raise ToolError(
@@ -313,13 +328,13 @@ class StrReplaceEditor(BaseTool):
                 f"in lines {lines}. Please ensure it is unique"
             )
 
-        # Replace old_str with new_str
+        # 通过字符串的 replace 方法进行替换
         new_file_content = file_content.replace(old_str, new_str)
 
-        # Write the new content to the file
+        # 将新内容写入文件
         await operator.write_file(path, new_file_content)
 
-        # Save the original content to history
+        # 保存原内容到历史记录
         self._file_history[path].append(file_content)
 
         # Create a snippet of the edited section
@@ -351,14 +366,14 @@ class StrReplaceEditor(BaseTool):
         file_text_lines = file_text.split("\n")
         n_lines_file = len(file_text_lines)
 
-        # Validate insert_line
+        # 校验插入行号是否有效
         if insert_line < 0 or insert_line > n_lines_file:
             raise ToolError(
                 f"Invalid `insert_line` parameter: {insert_line}. It should be within "
                 f"the range of lines of the file: {[0, n_lines_file]}"
             )
 
-        # Perform insertion
+        # 执行插入
         new_str_lines = new_str.split("\n")
         new_file_text_lines = (
             file_text_lines[:insert_line]
@@ -366,7 +381,7 @@ class StrReplaceEditor(BaseTool):
             + file_text_lines[insert_line:]
         )
 
-        # Create a snippet for preview
+        # 创建预览片段
         snippet_lines = (
             file_text_lines[max(0, insert_line - SNIPPET_LINES) : insert_line]
             + new_str_lines
@@ -412,7 +427,7 @@ class StrReplaceEditor(BaseTool):
         init_line: int = 1,
         expand_tabs: bool = True,
     ) -> str:
-        """Format file content for display with line numbers."""
+        """Format file content for display with line numbers.用行号格式化文件内容以供显示"""
         file_content = maybe_truncate(file_content)
         if expand_tabs:
             file_content = file_content.expandtabs()

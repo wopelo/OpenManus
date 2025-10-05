@@ -6,6 +6,7 @@ from app.tool import BaseTool
 
 
 class CreateChatCompletion(BaseTool):
+    """使用指定的格式输出结果"""
     name: str = "create_chat_completion"
     description: str = (
         "Creates a structured completion with specified output formatting."
@@ -20,6 +21,7 @@ class CreateChatCompletion(BaseTool):
         dict: "object",
         list: "array",
     }
+    # Type 用来表示类型，即 response_type 的作用不是存储值，而是存储“这个值应该是什么类型”。
     response_type: Optional[Type] = None
     required: List[str] = Field(default_factory=lambda: ["response"])
 
@@ -31,6 +33,7 @@ class CreateChatCompletion(BaseTool):
 
     def _build_parameters(self) -> dict:
         """Build parameters schema based on response type."""
+        # 若response_type为str，返回包含字符串类型响应的模式
         if self.response_type == str:
             return {
                 "type": "object",
@@ -43,6 +46,7 @@ class CreateChatCompletion(BaseTool):
                 "required": self.required,
             }
 
+        # 若response_type是继承自BaseModel的类，获取其JSON模式
         if isinstance(self.response_type, type) and issubclass(
             self.response_type, BaseModel
         ):
@@ -53,14 +57,21 @@ class CreateChatCompletion(BaseTool):
                 "required": schema.get("required", self.required),
             }
 
+        # 调用_create_type_schema方法处理其他类型
         return self._create_type_schema(self.response_type)
 
     def _create_type_schema(self, type_hint: Type) -> dict:
         """Create a JSON schema for the given type."""
+        # 获取一个泛型类型的基本类型
+        # get_origin(List[int]) 返回 <class 'list'>
+        # get_origin(str) 返回 None（非泛型类型）
         origin = get_origin(type_hint)
+        # 获取泛型类型的参数
+        # get_args(List[int]) 返回 (int,)
+        # get_args(str) 返回 ()
         args = get_args(type_hint)
 
-        # Handle primitive types
+        # 处理基本类型
         if origin is None:
             return {
                 "type": "object",
@@ -73,7 +84,7 @@ class CreateChatCompletion(BaseTool):
                 "required": self.required,
             }
 
-        # Handle List type
+        # 处理列表类型
         if origin is list:
             item_type = args[0] if args else Any
             return {
@@ -81,13 +92,13 @@ class CreateChatCompletion(BaseTool):
                 "properties": {
                     "response": {
                         "type": "array",
-                        "items": self._get_type_info(item_type),
+                        "items": self._get_type_info(item_type), # 递归处理子元素类型
                     }
                 },
                 "required": self.required,
             }
 
-        # Handle Dict type
+        # 处理字典类型
         if origin is dict:
             value_type = args[1] if len(args) > 1 else Any
             return {
@@ -101,14 +112,15 @@ class CreateChatCompletion(BaseTool):
                 "required": self.required,
             }
 
-        # Handle Union type
+        # 处理联合类型
         if origin is Union:
             return self._create_union_schema(args)
 
+        # 这里是否应该返回一个默认的 schema 更好一些？目前的写法可能会导致无限递归循环
         return self._build_parameters()
 
     def _get_type_info(self, type_hint: Type) -> dict:
-        """Get type information for a single type."""
+        """Get type information for a single type.获取单个类型的类型信息"""
         if isinstance(type_hint, type) and issubclass(type_hint, BaseModel):
             return type_hint.model_json_schema()
 
@@ -118,7 +130,7 @@ class CreateChatCompletion(BaseTool):
         }
 
     def _create_union_schema(self, types: tuple) -> dict:
-        """Create schema for Union types."""
+        """Create schema for Union types.为Union类型创建schema"""
         return {
             "type": "object",
             "properties": {
